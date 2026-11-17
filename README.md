@@ -19,6 +19,7 @@ docker compose up --build -d
 - 复检裁决：`/m5_calculate`、`/api/m5_calculate`
 - 批次判级：`/m6_reconcile`、`/api/m6_reconcile`
 - 报告归档：`/m7_archive`、`/api/m7_archive`
+- 交接封存：`/m8_handover`、`/api/m8_handover`、`/api/handover/seals`
 
 ## 核心规则
 
@@ -32,6 +33,8 @@ docker compose config --quiet
 ```
 
 原始样例在 `sample_data/`。测试在 `tests/`。封存文件是单份CSV，含运行清单、计算证据、隔离原因与对账。复核需提交当前版本，陈旧复核返回409。
+
+交接封存另有一份只读CSV（`/api/handover/seals/<封存号>/export.csv`），含封存头、截止依据、等级变化、纳入/补正/隔离/延期证据与封存链校验。封存件写入后不可覆盖，补正只能追加新件并引用前件校验和。
 
 ## 数据与限制
 

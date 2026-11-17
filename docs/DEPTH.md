@@ -13,6 +13,7 @@
 | M5 复检裁决 | 查看并复算复检裁决 | `/api/m5_calculate` | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py` |
 | M6 批次判级 | 查看并复算批次判级 | `/api/m6_reconcile` | `app/modules/m6_reconcile/compare.py` | `tests/test_reconcile.py` |
 | M7 报告归档 | 查看并复算报告归档 | `/api/m7_archive` | `app/modules/m7_archive/export_out.py` | `tests/test_archive.py` |
+| M8 交接封存 | 裁决交接范围、封存与补正追溯 | `/api/m8_handover` | `app/modules/m8_handover/engine.py` | `tests/test_handover.py` |
 
 ## 陷阱登记
 
@@ -32,10 +33,15 @@
 | TRAP-15 | ug/kg与mg/kg | 差1000倍 | 浓度统一mg/kg | `app/modules/m4_segments/rules.py` | `tests/test_segments.py::test_unit_conversion` |
 | TRAP-25 | 标准时间边界 | 双版或错版 | 采样日半开区间选版 | `app/modules/m3_versions/standards.py` | `tests/test_versions.py::test_halfopen_effective` |
 | TRAP-20 | 复检引用环 | 遍历无法结束 | 引用路径检测 | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py::test_cycle_rejected` |
+| TRAP-31 | 补正重跑重复纳入 | 已交件被再次计入 | 按 report_key 去重，重跑只算已交件 | `app/modules/m8_handover/engine.py` | `tests/test_handover.py::test_resealing_same_run_cannot_double_include` |
+| TRAP-32 | 已交件被新修订版覆盖 | 版本号更大即替换 | 同源修订列为差异，保留封存件原值 | `app/modules/m8_handover/engine.py` | `tests/test_handover.py::test_sealed_revision_is_divergence_not_replacement` |
+| TRAP-33 | 隔离证据在补正中丢失 | 只写补正后的新值 | 未消费的父证据携转，纳入项保留 origin_ref | `app/modules/m8_handover/engine.py` | `tests/test_handover.py::test_correction_links_back_to_same_origin_and_carries_evidence` |
 
 ## 对账规则
 
 输入行数=采纳+隔离+空行+重复表头+完全重复；业务总数与计算证据独立求和。隔离行保留来源行、ID、原因码与原值。
+
+封存件对账：本次纳入+已交件=本次运行计算项；暂不采信=本次隔离项；超期延期单列。携转证据来自前件，另行计数，不与本次运行相加。封存链每件记录 parent 与 parent_checksum，补正件携带全部未消费的父证据。
 
 ## 已知不覆盖
 

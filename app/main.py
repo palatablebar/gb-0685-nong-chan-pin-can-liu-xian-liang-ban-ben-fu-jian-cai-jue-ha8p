@@ -20,7 +20,7 @@ def create_app():
     def health():return jsonify(status='ok')
     @app.post('/api/runs')
     def submit():
-        content,params=payload();state=run(content,params);return jsonify(store.save(state['run_id'],state))
+        content,params=payload();state=run(content,params,seals=store.seals());return jsonify(store.save(state['run_id'],state))
     @app.get('/api/runs')
     def list_runs():return jsonify(store.history())
     @app.get('/api/runs/<run_id>')

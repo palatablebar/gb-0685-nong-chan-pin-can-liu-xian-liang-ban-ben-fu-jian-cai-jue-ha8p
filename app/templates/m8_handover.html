@@ -1,0 +1,109 @@
+{% extends "base.html" %}{% block content %}
+{% set h=data.handover %}
+<div class="handover-bar">
+  <div class="cutoff-card">
+    <header><h2>截止依据</h2><span>{{h.cutoff.source}}</span></header>
+    <div class="cutoff-body">
+      <b>{{h.cutoff.as_of}}</b>
+      <div class="basis">{{h.cutoff.basis}}</div>
+      <div class="rule">{{h.cutoff.rule}}</div>
+      <div class="rule">采用时区 {{h.cutoff.timezone}} · 规则版本 {{h.view.rule_version}}</div>
+    </div>
+  </div>
+  <div class="decision-card {{'hold' if h.intent=='none' else 'ship'}}">
+    <header><h2>本次交接裁决</h2><span>{{h.label}}</span></header>
+    <div class="decision-body">
+      <p class="verdict-line">{{h.recommendation}}</p>
+      <dl class="mini">
+        <dt>本次纳入</dt><dd>{{h.counts.included}}</dd>
+        <dt>暂不采信</dt><dd>{{h.counts.withheld}}</dd>
+        <dt>携转旧证据</dt><dd>{{h.counts.carried}}</dd>
+        <dt>超期延期</dt><dd>{{h.counts.deferred}}</dd>
+        <dt>已交件不重复</dt><dd>{{h.counts.already_sealed}}</dd>
+      </dl>
+      <div class="seal-actions">
+        {% if h.candidate.ok %}
+        <button id="seal" data-run="{{data.run_id}}" data-parent="{{h.latest_seal or ''}}" data-kind="{{h.intent}}">
+          {{'提交补正封存' if h.intent=='correction' else '提交交接封存'}}</button>
+        {% else %}
+        <button id="seal" disabled>无可封存项目</button>
+        {% endif %}
+        {% if h.latest_seal %}<a href="/api/handover/seals/{{h.latest_seal}}/export.csv" download>导出最近封存证据</a>{% endif %}
+      </div>
+      {% if not h.candidate.ok %}<div class="hint">{{h.candidate.error}}</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+<section class="panel wide">
+  <header><h2>等级变化（补正重跑后）</h2><span>{{h.view.grades|length}} 批 · {{h.view.grade_changes|length}} 批变化</span></header>
+  <p class="legend">前值取最近封存件等级；后值按本次重跑结果，含已交件与本次纳入项目。等级取 FAIL &gt; UNCERTAIN &gt; PASS。</p>
+  <div class="grade-grid compact">
+    {% for g in h.view.grades %}
+    <article class="{{'moved' if g.changed else ''}}">
+      <div><b>{{g.batch}}</b><span>{{g.samples}} 样本 / {{g.projects}} 项 · 待补正 {{g.open}} · 延期 {{g.deferred}} · 携转 {{g.retained}}</span></div>
+      <div class="delta">
+        <span class="was">{{g.before_label}}</span><i>→</i>
+        <strong class="grade {{g.after|lower}}">{{g.after_label}}</strong>
+      </div>
+      {% if g.provisional %}<em class="provisional">暂定：仍有未采信项</em>{% endif %}
+    </article>
+    {% else %}<p class="empty">本次没有可判级批次</p>{% endfor %}
+  </div>
+</section>
+
+<section class="panel wide">
+  <header><h2>纳入范围</h2><span>{{data.handover.counts.included}} 项</span></header>
+  <div class="scroll"><table>
+    <thead><tr><th>行</th><th>报告ID</th><th>批次</th><th>样本</th><th>项目</th><th>区间</th><th>限量</th><th>结论</th><th>来源</th></tr></thead>
+    <tbody>{% for r in h.scope.included %}
+      <tr><td class="num">{{r.line}}</td><td>{{r.id}}</td><td>{{r.batch}}</td><td>{{r.sample_id}}</td><td>{{r.analyte}}</td>
+        <td class="num">{{r.lower}} – {{'<' if r.upper_exclusive else '≤'}}{{r.upper}}</td>
+        <td class="num">{{r.limit}}</td><td><span class="verdict {{r.code|lower}}">{{r.code}}</span></td>
+        <td class="ref">{{r.ref}}{% if r.origin_ref %}<small>补正自 {{r.origin_ref}}（{{r.origin_basis}}）</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="9" class="empty">本次无新增可采信项目</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel wide">
+  <header><h2>暂不采信 · 隔离证据</h2><span>{{h.scope.withheld|length}} 条</span></header>
+  <div class="scroll"><table>
+    <thead><tr><th>行</th><th>报告ID</th><th>批次</th><th>原因</th><th>状态</th><th>来源</th><th>原值</th></tr></thead>
+    <tbody>{% for q in h.scope.withheld %}
+      <tr><td class="num">{{q.line}}</td><td>{{q.id}}</td><td>{{q.batch or '—'}}</td>
+        <td><span class="reject">{{q.code}}</span></td>
+        <td>{% if q.carried %}<span class="tag carried">携转</span>{% else %}<span class="tag open">待补正</span>{% endif %}</td>
+        <td class="ref">{{q.origin_ref or q.ref}}{% if q.origin_basis %}<small>{{q.origin_basis}}</small>{% endif %}</td>
+        <td class="raw">{{q.raw}}</td></tr>
+    {% else %}<tr><td colspan="7" class="empty">无隔离证据</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+{% if h.scope.deferred or h.scope.already_sealed or h.scope.divergences %}
+<section class="panel wide">
+  <header><h2>未纳入说明</h2><span>延期 {{h.scope.deferred|length}} · 已交件 {{h.scope.already_sealed|length}} · 差异 {{h.scope.divergences|length}}</span></header>
+  <div class="scroll"><table>
+    <thead><tr><th>类别</th><th>行</th><th>报告ID</th><th>批次</th><th>说明</th><th>来源</th></tr></thead>
+    <tbody>
+    {% for r in h.scope.deferred %}<tr><td><span class="tag defer">超期延期</span></td><td class="num">{{r.line}}</td><td>{{r.id}}</td><td>{{r.batch}}</td><td>报告日 {{r.reported}} 晚于截止 {{h.cutoff.date}}</td><td class="ref">{{r.ref}}</td></tr>{% endfor %}
+    {% for r in h.scope.already_sealed %}<tr><td><span class="tag sealed">已交件</span></td><td class="num">{{r.line}}</td><td>{{r.id}}</td><td>{{r.batch}}</td><td>已由封存件 {{r.seal_id}} 纳入，保持原样不重复</td><td class="ref">{{r.sealed_ref}}</td></tr>{% endfor %}
+    {% for r in h.scope.divergences %}<tr><td><span class="tag diverge">重跑差异</span></td><td class="num"></td><td>{{r.id}}</td><td></td><td>封存 {{r.sealed.code}} vs 重跑 {{r.rerun.code}}；以封存件为准</td><td class="ref">{{r.sealed_ref}}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section class="panel wide">
+  <header><h2>封存链</h2><span>{{h.seals|length}} 份</span></header>
+  <div class="scroll"><table>
+    <thead><tr><th>封存号</th><th>类型</th><th>父件</th><th>截止</th><th>纳入/隔离/补正</th><th>校验</th><th>导出</th></tr></thead>
+    <tbody>{% for s in h.seals %}
+      <tr><td>{{s.seal_id}}</td><td>{{'补正' if s.kind=='correction' else '首次'}}</td><td>{{s.parent or '—'}}</td>
+        <td>{{s.cutoff.date}} {{s.cutoff.as_of[11:16]}}</td>
+        <td class="num">{{s.counts.included}} / {{s.counts.withheld}} / {{s.counts.corrections}}</td>
+        <td class="ref">{{s.checksum[:16]}}…</td>
+        <td><a href="/api/handover/seals/{{s.seal_id}}/export.csv">CSV</a></td></tr>
+    {% else %}<tr><td colspan="7" class="empty">尚无封存件</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}
